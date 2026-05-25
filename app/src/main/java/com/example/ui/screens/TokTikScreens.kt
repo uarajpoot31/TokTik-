@@ -592,6 +592,17 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
     }
 }
 
+fun getVideoThumbnail(video: CachedVideo): String {
+    return when {
+        video.username == "neon_rider" -> "https://images.unsplash.com/photo-1515260268569-9271009adfdb?q=80&w=600"
+        video.username == "chef_elite" -> "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=600"
+        video.username == "golden_paws" -> "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=600"
+        video.username == "keyboard_clicks" -> "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?q=80&w=600"
+        video.id.startsWith("user_vid_") -> "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600"
+        else -> "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600"
+    }
+}
+
 // 4. HOME FEED SCREEN (TikTok vertical swipe)
 @Composable
 fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit) {
@@ -643,14 +654,43 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                     // Full-bleed Video details rendering with customized overlays
                     Box(modifier = Modifier.fillMaxSize()) {
 
-                        // Underlay Background static image (since we simulate native player beautifully)
+                        // Beautiful Full-bleed high-quality representative background
                         AsyncImage(
-                            model = currentVideo.userAvatar,
-                            contentDescription = "Fallback background",
+                            model = getVideoThumbnail(currentVideo),
+                            contentDescription = "Simulated Video Preview Thumbnail",
                             contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        // Dark cinematic vertical gradient scrim overlay for premium readability
+                        Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer(alpha = 0.15f)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Black.copy(0.7f),
+                                            Color.Transparent,
+                                            Color.Black.copy(0.75f)
+                                        )
+                                    )
+                                )
+                        )
+
+                        // Center glowing radial ambient simulated lighting flare
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            Color(0x2BFFFFFF),
+                                            Color.Transparent
+                                        ),
+                                        center = Offset.Unspecified,
+                                        radius = 400f
+                                    )
+                                )
                         )
 
                         // Interactive Video Canvas simulating audio progress and playback
@@ -771,22 +811,20 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 IconButton(
                                     onClick = { viewModel.toggleLike(currentVideo.id) },
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                    modifier = Modifier.size(44.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (currentVideo.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                         contentDescription = "Like",
                                         tint = if (currentVideo.isLiked) RedPrimary else Color.White,
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(32.dp)
                                     )
                                 }
                                 Text(
                                     text = formattedCount(currentVideo.likesCount),
                                     color = Color.White,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
 
@@ -794,22 +832,20 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 IconButton(
                                     onClick = { showCommentDrawerForVideo = currentVideo.id },
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                    modifier = Modifier.size(44.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Comment,
                                         contentDescription = "Comments",
                                         tint = Color.White,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.size(30.dp)
                                     )
                                 }
                                 Text(
                                     text = formattedCount(currentVideo.commentsCount),
                                     color = Color.White,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
 
@@ -817,22 +853,20 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 IconButton(
                                     onClick = { showShareDrawerForVideo = currentVideo.id },
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                    modifier = Modifier.size(44.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.CardGiftcard,
                                         contentDescription = "Gifts Support",
                                         tint = GoldAccent,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.size(30.dp)
                                     )
                                 }
                                 Text(
                                     text = "GIFT",
                                     color = GoldAccent,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
 
@@ -843,22 +877,20 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                                         viewModel.toggleSave(currentVideo.id)
                                         Toast.makeText(context, if (currentVideo.isSaved) "Video removed from bookmarks!" else "Saved to Bookmarks folder!", Toast.LENGTH_SHORT).show()
                                     },
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                    modifier = Modifier.size(44.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (currentVideo.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                                         contentDescription = "Bookmark",
                                         tint = if (currentVideo.isSaved) GoldAccent else Color.White,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.size(30.dp)
                                     )
                                 }
                                 Text(
                                     text = formattedCount(currentVideo.sharesCount),
                                     color = Color.White,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
 
@@ -876,18 +908,26 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
 
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .padding(top = 4.dp)
+                                    .size(44.dp)
                                     .rotate(rotationDegrees)
-                                    .background(Color(0xFF1E1E24), CircleShape)
-                                    .border(4.dp, Color.Black, CircleShape),
+                                    .background(Color(0xFF27272A), CircleShape)
+                                    .border(8.dp, Color(0xFF18181B), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .size(20.dp)
-                                        .background(Color.Red, CircleShape)
+                                        .background(
+                                            Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color(0xFFEC4899), // pink-500
+                                                    Color(0xFFFB923C)  // orange-400
+                                                )
+                                            ),
+                                            CircleShape
+                                        )
                                 )
-                                Icon(Icons.Filled.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
                             }
                         }
 
