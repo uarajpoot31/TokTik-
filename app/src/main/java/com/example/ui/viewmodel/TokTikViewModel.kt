@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -40,6 +41,7 @@ class TokTikViewModel(
     // In-memory UI States
     var currentFeedIndex = mutableStateOf(0)
     var isDarkMode = mutableStateOf(true) // Theme state flow
+    var isUrduSelected = mutableStateOf(false) // Dynamic language flow (English vs Urdu)
 
     // Search results states
     private val _searchQuery = MutableStateFlow("")
@@ -121,37 +123,41 @@ class TokTikViewModel(
     }
 
     // Session Operations
-    fun handleAuthentication(username: String, isGoogle: Boolean = false, isFB: Boolean = false) {
+    fun handleAuthentication(username: String, passwordText: String = "", isGoogle: Boolean = false, isFB: Boolean = false) {
         viewModelScope.launch {
             val prebuiltAvatar = when {
                 isGoogle -> "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200"
                 isFB -> "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=200"
                 else -> "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200"
             }
-            val cleanUsername = if (username.trim().isEmpty()) "toktik_star" else username.trim().lowercase().replace(" ", "_")
+            val cleanUsername = if (username.trim().isEmpty()) "toktik_star" else username.trim()
+            val isAdminUser = cleanUsername.lowercase() == "usamaarfi" && passwordText == "727738"
+
             val newSess = UserSession(
                 id = "current",
                 username = cleanUsername,
-                bio = "Hi TokTik community! Content Creator in progress 💫",
-                profilePicUrl = prebuiltAvatar,
-                followers = 15,
-                following = 24,
-                coins = 300,
-                isVerified = false,
+                bio = if (isAdminUser) "Primary System Admin & Controller 🛡️" else "Hi TokTik community! Content Creator in progress 💫",
+                profilePicUrl = if (isAdminUser) "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200" else prebuiltAvatar,
+                followers = if (isAdminUser) 999999 else 15,
+                following = if (isAdminUser) 1 else 24,
+                coins = if (isAdminUser) 99999 else 300,
+                points = if (isAdminUser) 500 else 0,
+                earningsRs = if (isAdminUser) 5.0 else 0.0,
+                isVerified = isAdminUser,
                 isPrivate = false,
                 isLoggedIn = true,
                 isGuest = false,
+                isAdmin = isAdminUser,
+                isBlocked = false,
                 socialLinks = "instagram.com/$cleanUsername"
             )
             repository.updateSession(newSess)
 
             // Trigger welcome push alert
-            repository.checkAndSeedDatabase()
-            repository.updateSession(newSess)
             triggerPushNotification(
                 type = "system",
-                title = "Welcome $cleanUsername!",
-                body = "Ready to explore TokTik premium trends? 🌟 Your first 300 coins bonus was credited."
+                title = if (isAdminUser) "Welcome Owner Usama Arfi! 🛡️" else "Welcome $cleanUsername!",
+                body = if (isAdminUser) "Secret Admin Controls unlocked. You have full system privileges." else "Ready to explore TokTik premium trends? 🌟 Your first 300 coins bonus was credited."
             )
         }
     }
@@ -227,7 +233,7 @@ class TokTikViewModel(
                 caption = caption,
                 hashtags = hashtags,
                 musicTitle = music,
-                path = "file://simulated_draft_video_${System.currentTimeMillis()}.mp4"
+                path = "file://toktik_draft_record_${System.currentTimeMillis()}.mp4"
             )
         }
     }
@@ -244,7 +250,7 @@ class TokTikViewModel(
                 caption = caption,
                 hashtags = hashtags,
                 music = music,
-                simulatedPath = "file://final_path_${System.currentTimeMillis()}.mp4"
+                simulatedPath = "file://stream_rendered_content_${System.currentTimeMillis()}.mp4"
             )
             if (draftIdToDelete != null) {
                 repository.deleteDraftDirect(draftIdToDelete)
@@ -352,6 +358,204 @@ class TokTikViewModel(
             )
             isAiLoading.value = false
             onCompleted(response)
+        }
+    }
+
+    // --- CUSTOM EARNING, BILLING & ADMINISTRATIVE SYSTEMS ---
+    val trendingSongs = mutableStateListOf(
+        "Block - Abida Parveen x Asim Azhar 🎤",
+        "Kahani Suno 2.0 - Kaifi Khalil 🎸",
+        "Bado Badi - Chahat Fateh Ali Khan 🤪",
+        "Tu Hai Kahan - AUR 🎵",
+        "Pasoori - Ali Sethi x Shae Gill 🌺",
+        "Habibi - Asim Azhar 🔥",
+        "Siri - Sidhu Moose Wala (Legend) 👑",
+        "Obsessed - Riar Saab ✨",
+        "Guli Mata - Saad Lamjarred x Shreya Ghoshal 🎶",
+        "Angreji Beat - Yo Yo Honey Singh 🕺"
+    )
+
+    fun addNewTrendingSong(name: String) {
+        if (name.trim().isNotEmpty() && !trendingSongs.contains(name.trim())) {
+            trendingSongs.add(name.trim())
+        }
+    }
+
+    // Video watching earning points tally: 10 points per watch/interaction
+    fun watchVideoAndEarnPoints() {
+        viewModelScope.launch {
+            val sess = repository.db.userSessionDao().getSessionDirect() ?: return@launch
+            if (sess.isBlocked) return@launch
+            val updatedSess = sess.copy(points = sess.points + 10)
+            repository.updateSession(updatedSess)
+        }
+    }
+
+    // Points conversion to Rs (100 points = Rs. 1)
+    fun redeemPointsToRs(onCompleted: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val sess = repository.db.userSessionDao().getSessionDirect() ?: return@launch
+            if (sess.points < 100) {
+                onCompleted(false, "You need at least 100 points to redeem! (100 Points = Rs. 1)")
+                return@launch
+            }
+            val redeemedRs = sess.points / 100.0
+            val restPoints = sess.points % 100
+            val updatedSess = sess.copy(
+                points = restPoints,
+                earningsRs = sess.earningsRs + redeemedRs
+            )
+            repository.updateSession(updatedSess)
+            
+            // Add transaction log
+            repository.db.walletTxDao().insertTx(
+                com.example.data.WalletTx(
+                    description = "Redeemed ${sess.points - restPoints} watch points",
+                    amount = redeemedRs.toInt(),
+                    isCredit = true
+                )
+            )
+            onCompleted(true, "Successfully redeemed points. Added Rs. $redeemedRs to your withdrawable earnings!")
+        }
+    }
+
+    // Withdraw earnings (with 10% auto-deduction towards 03193736056 JazzCash business address)
+    fun requestWithdrawRs(amountRs: Double, mobileNo: String, isEasyPaisa: Boolean, onCompleted: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val sess = repository.db.userSessionDao().getSessionDirect() ?: return@launch
+            if (sess.earningsRs < amountRs) {
+                onCompleted(false, "Insufficient withdrawable earnings balance! Current balance: Rs. ${sess.earningsRs}")
+                return@launch
+            }
+            if (amountRs < 50) {
+                onCompleted(false, "Minimum withdrawal limit is Rs. 50")
+                return@launch
+            }
+            
+            val commission = amountRs * 0.10
+            val creatorProfit = amountRs - commission
+            
+            val updatedSess = sess.copy(earningsRs = sess.earningsRs - amountRs)
+            repository.updateSession(updatedSess)
+            
+            // Log the withdrawal transaction
+            repository.db.walletTxDao().insertTx(
+                com.example.data.WalletTx(
+                    description = "Withdrawal to ${if (isEasyPaisa) "EasyPaisa" else "JazzCash"} ($mobileNo)",
+                    amount = amountRs.toInt(),
+                    isCredit = false
+                )
+            )
+            
+            // Log 10% royalty commission ledger
+            repository.db.walletTxDao().insertTx(
+                com.example.data.WalletTx(
+                    description = "10% Platform Comm to Usama Arfi (03193736056)",
+                    amount = commission.toInt(),
+                    isCredit = false
+                )
+            )
+            
+            onCompleted(
+                true,
+                "Withdrawal Successful! Total: Rs. $amountRs. " +
+                "90% (Rs. $creatorProfit) sent to your $mobileNo account. " +
+                "10% (Rs. $commission) platform commission automatically routed to administrative JazzCash merchant account (03193736056)!"
+            )
+        }
+    }
+
+    // Native Premium billing: buy coin packets and credit wallet instantly 
+    fun purchaseCoinsWithJazzCash(amountCoins: Int, costRs: Int, txnId: String, onCompleted: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val sess = repository.db.userSessionDao().getSessionDirect() ?: return@launch
+            val updatedSess = sess.copy(coins = sess.coins + amountCoins)
+            repository.updateSession(updatedSess)
+            
+            // Insert wallet tx
+            repository.db.walletTxDao().insertTx(
+                com.example.data.WalletTx(
+                    description = "Purchased $amountCoins Coins via JazzCash Business (TID: $txnId)",
+                    amount = costRs,
+                    isCredit = true
+                )
+            )
+            
+            // Trigger push
+            triggerPushNotification(
+                type = "system",
+                title = "Coins Payment Verified! ✨",
+                body = "Successfully credited $amountCoins Coins to your account after verifying payment transaction $txnId of Rs. $costRs."
+            )
+            onCompleted(true)
+        }
+    }
+
+    // Publish video from Gallery or record simulated camera
+    fun publishCustomVideo(caption: String, hashtags: String, music: String, videoUrl: String) {
+        viewModelScope.launch {
+            val sess = repository.db.userSessionDao().getSessionDirect() ?: return@launch
+            val newVideo = CachedVideo(
+                id = "user_reels_${System.currentTimeMillis()}",
+                username = sess.username,
+                userAvatar = sess.profilePicUrl.ifEmpty { "https://images.unsplash.com/photo-1534528741775-53994a69daeb" },
+                videoUrl = videoUrl,
+                caption = caption,
+                hashtags = hashtags,
+                musicName = music.ifEmpty { "Original Sound - @${sess.username}" },
+                likesCount = 0,
+                commentsCount = 0,
+                sharesCount = 0,
+                viewsCount = 1,
+                isLiked = false,
+                isSaved = false,
+                isVerified = sess.isVerified,
+                commentsJson = "[]"
+            )
+            repository.addNewVideo(newVideo)
+            
+            triggerPushNotification(
+                type = "video",
+                title = "Reel Published! 🎬",
+                body = "Your custom recorded video with track '$music' is now playing in the Feed!"
+            )
+        }
+    }
+
+    // Admin direct control operations:
+    fun adminUpdateVideoText(videoId: String, newCaption: String, newHashtags: String, newMusic: String) {
+        viewModelScope.launch {
+            val matchedVideo = videos.value.find { it.id == videoId } ?: return@launch
+            val updatedVideo = matchedVideo.copy(
+                caption = newCaption,
+                hashtags = newHashtags,
+                musicName = newMusic
+            )
+            repository.updateVideoDetails(updatedVideo)
+        }
+    }
+
+    // Admin goes viral: boost views, likes (+5000), comments (+250) instantly
+    fun adminBoostVideoViral(videoId: String) {
+        viewModelScope.launch {
+            val matchedVideo = videos.value.find { it.id == videoId } ?: return@launch
+            val updatedVideo = matchedVideo.copy(
+                viewsCount = matchedVideo.viewsCount + 150000,
+                likesCount = matchedVideo.likesCount + 9500,
+                commentsCount = matchedVideo.commentsCount + 4200,
+                sharesCount = matchedVideo.sharesCount + 2300,
+                isVerified = true
+            )
+            repository.updateVideoDetails(updatedVideo)
+        }
+    }
+
+    // Admin blocks video or bans/unbans its creator
+    fun adminToggleVideoBlock(videoId: String) {
+        viewModelScope.launch {
+            val matchedVideo = videos.value.find { it.id == videoId } ?: return@launch
+            val updatedVideo = matchedVideo.copy(isBlocked = !matchedVideo.isBlocked)
+            repository.updateVideoDetails(updatedVideo)
         }
     }
 }

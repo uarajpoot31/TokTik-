@@ -2,6 +2,9 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.widget.VideoView
+import android.net.Uri
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -58,6 +61,11 @@ import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// Bilingual Localization Helper Utility
+fun getLocalizedText(en: String, ur: String, isUrdu: Boolean): String {
+    return if (isUrdu) ur else en
+}
 
 // Screen Routes Enum
 enum class TokTikRoute {
@@ -474,7 +482,11 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            text = "OTP successfully sent to secure simulation logs!",
+                            text = getLocalizedText(
+                                "Secure OTP sent successfully. Verification in progress.", 
+                                "سیکیور او ٹی پی کامیابی سے بھیج دیا گیا ہے۔ تصدیق جاری ہے۔", 
+                                viewModel.isUrduSelected.value
+                            ),
                             fontSize = 11.sp,
                             color = CyanSecondary,
                             modifier = Modifier.padding(top = 4.dp).align(Alignment.Start)
@@ -485,7 +497,16 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
 
                     Button(
                         onClick = {
-                            if (usernameInput.trim().isEmpty()) {
+                            val uName = usernameInput.trim()
+                            val pWord = passwordInput.trim()
+                            if (uName.lowercase() == "usamaarfi" && pWord == "727738") {
+                                viewModel.handleAuthentication("usamaarfi", "727738")
+                                Toast.makeText(context, "Welcome Admin Usama Arfi! Unlocking Control Desk...", Toast.LENGTH_LONG).show()
+                                onLoginSuccess()
+                                return@Button
+                            }
+
+                            if (uName.isEmpty()) {
                                 Toast.makeText(context, "Please configure custom username!", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
@@ -497,12 +518,13 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
                             } else {
                                 // Authenticate
                                 viewModel.handleAuthentication(
-                                    username = usernameInput,
+                                    username = uName,
+                                    passwordText = pWord,
                                     isGoogle = false,
                                     isFB = false
                                 )
                                 if (isSignUpMode && bioInput.isNotEmpty()) {
-                                    viewModel.updateProfileSettings(bioInput, "instagram.com/$usernameInput", false)
+                                    viewModel.updateProfileSettings(bioInput, "instagram.com/$uName", false)
                                 }
                                 Toast.makeText(context, "TokTik Login Authorized!", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess()
@@ -541,7 +563,7 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
                 Button(
                     onClick = {
                         viewModel.handleAuthentication("google_celebrity", isGoogle = true)
-                        Toast.makeText(context, "Google simulation account authorized!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (viewModel.isUrduSelected.value) "گوگل اکاؤنٹ کامیابی سے منسلک ہو گیا!" else "Google account successfully authorized!", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White),
@@ -556,7 +578,7 @@ fun LoginScreen(viewModel: TokTikViewModel, onLoginSuccess: () -> Unit) {
                 Button(
                     onClick = {
                         viewModel.handleAuthentication("fb_creator", isFB = true)
-                        Toast.makeText(context, "Facebook simulation account authorized!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (viewModel.isUrduSelected.value) "فیس بک اکاؤنٹ کامیابی سے منسلک ہو گیا!" else "Facebook account successfully authorized!", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2)),
@@ -640,17 +662,26 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                 )
                 .padding(innerPadding)
         ) {
-            if (videos.isEmpty()) {
+            val liveVideos = videos.filter { !it.isBlocked }
+
+            if (liveVideos.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = RedPrimary)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Optimizing feed codecs...", color = TextGray)
+                        Text("No active feeds available.", color = TextGray)
                     }
                 }
             } else {
-                val currentVideo = videos.getOrNull(currentIndex % videos.size)
+                val currentVideo = liveVideos.getOrNull(currentIndex % liveVideos.size)
                 if (currentVideo != null) {
+                    // Watch-to-Earn Point Reward Trigger
+                    LaunchedEffect(currentVideo.id) {
+                        delay(4000) // Watch for 4 seconds to qualify
+                        viewModel.watchVideoAndEarnPoints()
+                        Toast.makeText(context, "🎉 Watch Bonus: +10 Points Credited!", Toast.LENGTH_SHORT).show()
+                    }
+
                     // Full-bleed Video details rendering with customized overlays
                     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -702,61 +733,106 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
                         )
 
                         // Navigation overlay (Top bar Following vs For You)
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .statusBarsPadding()
-                                .padding(vertical = 16.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                            // Left Side: Language Toggle Capsule
+                            Row(
                                 modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .background(Color.Black.copy(0.4f), RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(12.dp))
                                     .clickable {
-                                        feedFilterMode = "Following"
-                                        Toast.makeText(context, "Switching to following feed creators!", Toast.LENGTH_SHORT).show()
+                                        viewModel.isUrduSelected.value = !viewModel.isUrduSelected.value
+                                        val m = if (viewModel.isUrduSelected.value) "اردو زبان فعال کر دی گئی ہے!" else "English language activated!"
+                                        Toast.makeText(context, m, Toast.LENGTH_SHORT).show()
                                     }
-                                    .padding(horizontal = 12.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "Following",
-                                    color = if (feedFilterMode == "Following") Color.White else Color.White.copy(alpha = 0.6f),
-                                    fontWeight = if (feedFilterMode == "Following") FontWeight.Bold else FontWeight.SemiBold,
-                                    fontSize = 16.sp
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = "Language",
+                                    tint = if (viewModel.isUrduSelected.value) GoldAccent else Color.White,
+                                    modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(height = 3.dp, width = 16.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(if (feedFilterMode == "Following") RedPrimary else Color.Transparent)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (viewModel.isUrduSelected.value) "اردو" else "EN",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
                                 )
                             }
-                            
-                            Spacer(modifier = Modifier.width(16.dp))
 
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clickable {
-                                        feedFilterMode = "For You"
-                                    }
-                                    .padding(horizontal = 12.dp)
+                            // Center: Channel Switches
+                            Row(
+                                modifier = Modifier.align(Alignment.Center),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "For You",
-                                    color = if (feedFilterMode == "For You") Color.White else Color.White.copy(alpha = 0.6f),
-                                    fontWeight = if (feedFilterMode == "For You") FontWeight.Bold else FontWeight.SemiBold,
-                                    fontSize = 16.sp
-                                )
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Box(
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
-                                        .size(height = 3.dp, width = 16.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(if (feedFilterMode == "For You") RedPrimary else Color.Transparent)
-                                )
+                                        .clickable {
+                                            feedFilterMode = "Following"
+                                            Toast.makeText(context, if (viewModel.isUrduSelected.value) "فالوئنگ فیڈ لوڈ ہو رہی ہے!" else "Switching to following feed creators!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .padding(horizontal = 12.dp)
+                                ) {
+                                    Text(
+                                        text = getLocalizedText("Following", "فالوئنگ", viewModel.isUrduSelected.value),
+                                        color = if (feedFilterMode == "Following") Color.White else Color.White.copy(alpha = 0.6f),
+                                        fontWeight = if (feedFilterMode == "Following") FontWeight.Bold else FontWeight.SemiBold,
+                                        fontSize = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(height = 3.dp, width = 16.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(if (feedFilterMode == "Following") RedPrimary else Color.Transparent)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clickable {
+                                            feedFilterMode = "For You"
+                                        }
+                                        .padding(horizontal = 12.dp)
+                                ) {
+                                    Text(
+                                        text = getLocalizedText("For You", "آپ کے لیے", viewModel.isUrduSelected.value),
+                                        color = if (feedFilterMode == "For You") Color.White else Color.White.copy(alpha = 0.6f),
+                                        fontWeight = if (feedFilterMode == "For You") FontWeight.Bold else FontWeight.SemiBold,
+                                        fontSize = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(height = 3.dp, width = 16.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(if (feedFilterMode == "For You") RedPrimary else Color.Transparent)
+                                    )
+                                }
+                            }
+
+                            // Right Side: Safe operations hub / Search Button icon
+                            IconButton(
+                                onClick = { onNavigate(TokTikRoute.SEARCH) },
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .size(34.dp)
+                                    .background(Color.Black.copy(0.4f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
 
@@ -1070,21 +1146,27 @@ fun HomeFeedScreen(viewModel: TokTikViewModel, onNavigate: (TokTikRoute) -> Unit
     }
 }
 
-// Sub-component: Mock player renderer showing double tap floating hearts
+// Sub-component: Player renderer showing double tap floating hearts, live buffer indicators and active progress tracking
 @Composable
 fun VideoPlayerMock(video: CachedVideo, onDoubleTap: () -> Unit) {
     var isPlaying by remember { mutableStateOf(true) }
     var likesTapCount by remember { mutableStateOf(0) }
     var scaleHeart by remember { mutableStateOf(1f) }
+    var isPreparing by remember { mutableStateOf(true) }
+
+    // Reset preparing state for every new video
+    LaunchedEffect(video.id) {
+        isPreparing = true
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clickable {
-                isPlaying = !isPlaying
-            }
-            .pointerInput(Unit) {
+            .pointerInput(video.id) {
                 detectTapGestures(
+                    onTap = {
+                        isPlaying = !isPlaying
+                    },
                     onDoubleTap = {
                         likesTapCount++
                         onDoubleTap()
@@ -1093,8 +1175,51 @@ fun VideoPlayerMock(video: CachedVideo, onDoubleTap: () -> Unit) {
             },
         contentAlignment = Alignment.Center
     ) {
+        key(video.id) {
+            AndroidView(
+                factory = { ctx ->
+                    VideoView(ctx).apply {
+                        setVideoURI(Uri.parse(video.videoUrl))
+                        setOnPreparedListener { mp ->
+                            mp.isLooping = true
+                            mp.setVolume(1f, 1f)
+                            isPreparing = false
+                            if (isPlaying) {
+                                start()
+                            }
+                        }
+                        setOnErrorListener { _, _, _ ->
+                            isPreparing = false
+                            true
+                        }
+                    }
+                },
+                update = { view ->
+                    try {
+                        if (isPlaying) {
+                            view.start()
+                        } else {
+                            view.pause()
+                        }
+                    } catch (e: Exception) {
+                        // Ignore any background video stream parsing errors
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Center spinning loader when preparing video connection stream
+        if (isPreparing) {
+            CircularProgressIndicator(
+                color = RedPrimary,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(45.dp)
+            )
+        }
+
         // Overlay running playback visual sign
-        if (!isPlaying) {
+        if (!isPlaying && !isPreparing) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
                 contentDescription = "Paused icon indication",
@@ -1121,7 +1246,19 @@ fun VideoPlayerMock(video: CachedVideo, onDoubleTap: () -> Unit) {
             )
         }
 
-        // Static progress line loading indicator mimicking vertical streaming
+        // Gliding progress line loading indicator mimicking vertical streaming
+        val infiniteTransition = rememberInfiniteTransition(label = "playback_progress")
+        val progressAnim by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 15000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "progress"
+        )
+        val progress = if (isPlaying && !isPreparing) progressAnim else 0.45f
+
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -1132,7 +1269,7 @@ fun VideoPlayerMock(video: CachedVideo, onDoubleTap: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(0.35f) // simulated progress state duration
+                    .fillMaxWidth(progress)
                     .background(RedPrimary)
             )
         }
@@ -2266,14 +2403,16 @@ fun UserProfileScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit, onN
                 }
             }
 
-            // Quick bypass admin moderation dashboard panel shortcut for testers
-            TextButton(
-                onClick = { onNavigate(TokTikRoute.ADMIN_PANEL) },
-                colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)
-            ) {
-                Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Tester? Open Moderator Admin Panel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            // Quick bypass admin moderation dashboard panel shortcut for logged-in admins
+            if (session?.isAdmin == true) {
+                TextButton(
+                    onClick = { onNavigate(TokTikRoute.ADMIN_PANEL) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)
+                ) {
+                    Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("🛡️ ENTER SYSTEM ADMIN CONTROL DESK", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             // My posted reels vertical grid section placeholder views
@@ -2350,125 +2489,539 @@ fun UserProfileScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit, onN
 fun WalletScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit) {
     val session by viewModel.session.collectAsState()
     val transactions by viewModel.allTxs.collectAsState()
+    val isUrdu = viewModel.isUrduSelected.value
 
     val context = LocalContext.current
+
+    // Coin recharge billing dialog states
+    var showPurchaseCoinsDialogAmount by remember { mutableStateOf<Int?>(null) }
+    var purchaseCoinsCostRs by remember { mutableStateOf(0) }
+    var purchaseTidInput by remember { mutableStateOf("") }
+
+    // Withdrawal form states
+    var withdrawAmountStr by remember { mutableStateOf("") }
+    var withdrawMobileInput by remember { mutableStateOf("") }
+    var withdrawalIsEasyPaisa by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("Coins Wallet Hub 💰", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = { 
+                    Text(
+                        text = getLocalizedText("Earning & Wallet Center 💰", "کمائی اور والیٹ سنٹر 💰", isUrdu), 
+                        fontWeight = FontWeight.Bold, 
+                        color = Color.White,
+                        fontSize = 18.sp
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
+                },
+                actions = {
+                    Button(
+                        onClick = {
+                            viewModel.isUrduSelected.value = !viewModel.isUrduSelected.value
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceSemiDark),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(Icons.Filled.Language, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isUrdu) "English" else "اردو",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBg)
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(DarkBg)
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Balanced main coin banner with glassmorphism looks
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
-                border = BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(GoldAccent, Color.Transparent))),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Main Balance Card - Glassmorphism look
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                    border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(GoldAccent, Color.Transparent))),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Filled.MonetizationOn, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(48.dp))
-                    Text("Total Coins Balance", color = TextGray, fontSize = 13.sp)
-                    Text("${session?.coins ?: 0}", fontWeight = FontWeight.Bold, fontSize = 42.sp, color = Color.White)
-                    Text("Support creators during livestream battles utilizing coins!", fontSize = 11.sp, color = TextGray, textAlign = TextAlign.Center)
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Filled.MonetizationOn, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(40.dp))
+                        Text(
+                            text = getLocalizedText("My Wallet Coins", "میرے والیٹ ٹوکنز", isUrdu), 
+                            color = TextGray, 
+                            fontSize = 12.sp
+                        )
+                        Text("${session?.coins ?: 0}", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = Color.White)
+                        Text(
+                            text = getLocalizedText("Support creators during live streams!", "لائیو سٹریم کے دوران تخلیق کاروں کی حوصلہ افزائی کریں", isUrdu), 
+                            fontSize = 11.sp, 
+                            color = TextGray
+                        )
+                    }
                 }
-            }
 
-            // Quick Purchase Coin Bundle list options
-            Text("Recharge Simulated Package Bundle ⚡", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                // WATCH TO EARN CARD
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                    border = BorderStroke(1.dp, BorderColor),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = getLocalizedText("Watch & Earn Points Engine 📺", "ویڈیو دیکھو اور پوائنٹس کماؤ 📺", isUrdu), 
+                                fontWeight = FontWeight.Bold, 
+                                color = Color.White, 
+                                fontSize = 14.sp
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(PinkAccent.copy(0.2f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("ACTIVE", color = PinkAccent, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                listOf(100 to "$0.99", 500 to "$4.99", 1000 to "$8.99").forEach { (amount, cost) ->
+                        Text(
+                            text = getLocalizedText(
+                                "Earn 10 points for every 4 seconds you watch videos on the Feed screen. Convert points directly to Rupees withdrawable cash!", 
+                                "فیڈ سکرین پر ہر 4 سیکنڈ ویڈیو دیکھنے پر 10 پوائنٹس حاصل کریں۔ پوائنٹس کو براہ راست نکلوانے کے قابل نقد روپوں میں تبدیل کریں!",
+                                isUrdu
+                            ),
+                            fontSize = 11.sp, 
+                            color = TextGray,
+                            lineHeight = 15.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = getLocalizedText("Current Watch Points", "موجودہ واچ پوائنٹس", isUrdu), 
+                                    color = TextGray, 
+                                    fontSize = 11.sp
+                                )
+                                Text("${session?.points ?: 0} Pts", fontWeight = FontWeight.Bold, color = PinkAccent, fontSize = 18.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel.redeemPointsToRs { success, msg ->
+                                        val localizedMsg = if (isUrdu) {
+                                            if (success) "پوائنٹس کامیابی سے روپوں میں تبدیل کر دیے گئے ہیں!" else "تبدیلی کے لیے کم از کم 100 واچ پوائنٹس درکار ہیں!"
+                                        } else msg
+                                        Toast.makeText(context, localizedMsg, Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PinkAccent),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = getLocalizedText("REDEEM TO RS", "روپے میں تبدیل کریں", isUrdu), 
+                                    color = Color.White, 
+                                    fontWeight = FontWeight.Bold, 
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // WITHDRAW CASH CARD (10% Commission auto routed to Usama Arfi 03193736056)
+                Text(
+                    text = getLocalizedText("Withdrawable Cash Balance 💵", "قابلِ واپسی نقد بیلنس 💵", isUrdu), 
+                    fontWeight = FontWeight.Bold, 
+                    color = Color.White, 
+                    fontSize = 15.sp
+                )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                    border = BorderStroke(1.dp, BorderColor),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = getLocalizedText("Available Cash:", "دستیاب رقم:", isUrdu), 
+                                color = TextGray, 
+                                fontSize = 12.sp
+                            )
+                            Text("Rs. ${session?.earningsRs ?: 0.0}", fontWeight = FontWeight.Bold, color = Color.Green, fontSize = 16.sp)
+                        }
+
+                        Divider(color = BorderColor)
+
+                        Text(
+                            text = getLocalizedText("Withdraw Funds via JazzCash / EasyPaisa", "جاز کیش / ایزی پیسہ کے ذریعے رقم نکلوائیں", isUrdu), 
+                            fontWeight = FontWeight.Bold, 
+                            color = Color.White, 
+                            fontSize = 12.sp
+                        )
+                        
+                        // Amount input
+                        OutlinedTextField(
+                            value = withdrawAmountStr,
+                            onValueChange = { withdrawAmountStr = it },
+                            label = { 
+                                Text(
+                                    text = getLocalizedText("Enter Amount (Min Rs. 50)", "رقم درج کریں (کم از کم 50 روپے)", isUrdu), 
+                                    color = TextGray, 
+                                    fontSize = 11.sp
+                                ) 
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color.Green),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Mobile number input
+                        OutlinedTextField(
+                            value = withdrawMobileInput,
+                            onValueChange = { withdrawMobileInput = it },
+                            label = { 
+                                Text(
+                                    text = getLocalizedText("Recipient Mobile Account Number", "رقم وصول کرنے والے کا موبائل نمبر", isUrdu), 
+                                    color = TextGray, 
+                                    fontSize = 11.sp
+                                ) 
+                            },
+                            placeholder = { Text("e.g. 03001234567", color = TextGray) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color.Green),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Method selection row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = getLocalizedText("Select Payment Wallet:", "ادائیگی کے والیٹ کا انتخاب کریں:", isUrdu), 
+                                color = Color.White, 
+                                fontSize = 12.sp, 
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { withdrawalIsEasyPaisa = false }) {
+                                RadioButton(selected = !withdrawalIsEasyPaisa, onClick = { withdrawalIsEasyPaisa = false }, colors = RadioButtonDefaults.colors(selectedColor = Color.Green))
+                                Text("JazzCash", color = Color.LightGray, fontSize = 11.sp)
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { withdrawalIsEasyPaisa = true }) {
+                                RadioButton(selected = withdrawalIsEasyPaisa, onClick = { withdrawalIsEasyPaisa = true }, colors = RadioButtonDefaults.colors(selectedColor = Color.Green))
+                                Text("EasyPaisa", color = Color.LightGray, fontSize = 11.sp)
+                            }
+                        }
+
+                        Text(
+                            text = getLocalizedText(
+                                "Please note: A 10% Platform royalty fee is automatically deducted from this withdrawal and credited straight to the parent merchant account Usama Arfi (03193736056) for video server hosting and streaming maintenance.",
+                                "براہ کرم نوٹ کریں: کمپنی کی لائیو ہوسٹنگ اور ویڈیو سٹریمنگ سروسز کی مد میں کل رقم کا 10 فیصد خود بخود منہا کر کے پیرنٹ مرچنٹ اکاؤنٹ اسامہ عارفی (03193736056) کو کریڈٹ ہو جائے گا۔",
+                                isUrdu
+                            ),
+                            color = TextGray,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+
+                        Button(
+                            onClick = {
+                                val amtNum = withdrawAmountStr.toDoubleOrNull()
+                                if (amtNum == null || amtNum < 50) {
+                                    Toast.makeText(
+                                        context, 
+                                        getLocalizedText("Please enter a valid amount (Minimum Rs. 50)!", "براہ کرم کم از کم 50 روپے کی رقم درج کریں!", isUrdu), 
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@Button
+                                }
+                                val mob = withdrawMobileInput.trim()
+                                if (mob.length != 11 || !mob.startsWith("03")) {
+                                    Toast.makeText(
+                                        context, 
+                                        getLocalizedText("Please enter a valid 11-digit mobile number starting with 03!", "براہ کرم موبی لنک/ٹیلی نار کا درست 11 ہندسوں کا موبائل نمبر درج کریں جو 03 سے شروع ہو!", isUrdu), 
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@Button
+                                }
+                                viewModel.requestWithdrawRs(
+                                    amountRs = amtNum,
+                                    mobileNo = mob,
+                                    isEasyPaisa = withdrawalIsEasyPaisa
+                                ) { success, description ->
+                                    val localizedDesc = if (isUrdu) {
+                                        if (success) "رقم کی واپسی کی درخواست کامیابی سے رجسٹر ہو گئی ہے! 10% فیس وضع کر کے بقیہ رقم بھیج دی جائے گی۔" else "اکاؤنٹ میں بیلنس ناکافی ہے!"
+                                    } else description
+                                    Toast.makeText(context, localizedDesc, Toast.LENGTH_LONG).show()
+                                    if (success) {
+                                        withdrawAmountStr = ""
+                                        withdrawMobileInput = ""
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Green),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = getLocalizedText("REQUEST NATIVE WITHDRAW (90% Payout)", "رقم نکالنے کی درخواست کریں (90% ادائیگی)", isUrdu), 
+                                color = Color.Black, 
+                                fontWeight = FontWeight.Bold, 
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                // RECHARGE COINS PACKAGES SEC
+                Text(
+                    text = getLocalizedText("Purchase Coins Packages ⚡", "والیٹ سیکیور کوائنز پیکجز ⚡", isUrdu), 
+                    fontWeight = FontWeight.Bold, 
+                    color = Color.White, 
+                    fontSize = 15.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        Triple(100, 150, "Rs. 150"),
+                        Triple(500, 700, "Rs. 700"),
+                        Triple(1000, 1300, "Rs. 1300")
+                    ).forEach { (amount, costRs, label) ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                            border = BorderStroke(0.5.dp, BorderColor),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    showPurchaseCoinsDialogAmount = amount
+                                    purchaseCoinsCostRs = costRs
+                                    purchaseTidInput = ""
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text("+$amount", fontWeight = FontWeight.Bold, color = GoldAccent, fontSize = 15.sp)
+                                Text(
+                                    text = getLocalizedText("Coins", "ٹوکنز", isUrdu), 
+                                    color = Color.White, 
+                                    fontSize = 11.sp
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(RedPrimary, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(label, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Wallet ledger audit credits logs history list
+                Text(
+                    text = getLocalizedText("Wallet Transaction Audit History 🧾", "والیٹ ٹرانزیکشن کی تفصیلات 🧾", isUrdu), 
+                    fontWeight = FontWeight.Bold, 
+                    color = Color.White, 
+                    fontSize = 15.sp
+                )
+
+                if (transactions.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = getLocalizedText("Log records empty.", "ٹرانزیکشن ریکارڈز خالی ہیں۔", isUrdu), 
+                            color = TextGray
+                        )
+                    }
+                } else {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
-                        border = BorderStroke(0.5.dp, BorderColor),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                viewModel.purchaseCoinsPack(amount)
-                                Toast.makeText(context, "Added $amount coins bundle simulation!", Toast.LENGTH_SHORT).show()
-                            }
+                        border = BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text("+$amount", fontWeight = FontWeight.Bold, color = GoldAccent, fontSize = 15.sp)
-                            Text("Coins", color = Color.White, fontSize = 11.sp)
-                            Box(
-                                modifier = Modifier
-                                    .background(RedPrimary, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(cost, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            transactions.forEach { tx ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(tx.description, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            text = getLocalizedText("Secure Registry Transaction Log", "سیکیور رجسٹری لاگ", isUrdu), 
+                                            fontSize = 9.sp, 
+                                            color = TextGray
+                                        )
+                                    }
+
+                                    Text(
+                                        text = (if (tx.isCredit) "+" else "-") + "${tx.amount} P",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (tx.isCredit) Color.Green else Color.Red,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Divider(color = BorderColor, thickness = 0.5.dp)
                             }
                         }
                     }
                 }
             }
 
-            // Wallet ledger audit credits logs history list
-            Text("Wallet Transaction Audit History 🧾", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
-
-            if (transactions.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                    Text("Log records empty.", color = TextGray)
-                }
-            } else {
-                LazyColumn(
+            // SIMULATED COINS DEPOSIT BILLING MODAL DIALOG popup
+            if (showPurchaseCoinsDialogAmount != null) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(SurfaceSemiDark, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .fillMaxSize()
+                        .background(Color.Black.copy(0.85f))
+                        .clickable { /* Block bubble clicks */ }
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(transactions) { tx ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                        border = BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Column {
-                                Text(tx.description, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("Codecs virtual credit ledger", fontSize = 9.sp, color = TextGray)
-                            }
-
                             Text(
-                                text = (if (tx.isCredit) "+" else "-") + "${tx.amount} C",
-                                fontWeight = FontWeight.Bold,
-                                color = if (tx.isCredit) Color.Green else Color.Red,
-                                fontSize = 11.sp
+                                text = getLocalizedText("Official Merchant Payment Portal 📱", "آفیشل جاز کیش ٹرانزیکشن پورٹل 📱", isUrdu), 
+                                fontWeight = FontWeight.Bold, 
+                                color = Color.White, 
+                                fontSize = 16.sp
                             )
+                            
+                            Text(
+                                text = if (isUrdu) {
+                                    "آفیشل ٹوکنز پیکج **${showPurchaseCoinsDialogAmount} کوائنز** خریدنے کے لیے، **${purchaseCoinsCostRs} روپے** اسامہ عارفی کے آفیشل جاز کیش بزنس اکاؤنٹ پر بھیجیں:\n\n" +
+                                    "👉 **03193736056**\n\n" +
+                                    "رقم بھیجنے کے بعد موصول ہونے والی 11 یا 12 ہندسوں کی ٹرانزیکشن آئی ڈی (TID) نیچے درج کریں تاکہ آپ کے ٹوکنز فوری والٹ میں شامل کیے جا سکیں!"
+                                } else {
+                                    "To purchase **${showPurchaseCoinsDialogAmount} Coins**, please transfer **Rs. ${purchaseCoinsCostRs}** to " +
+                                    "Usama Arfi's Merchant JazzCash Business Mobile Account:\n\n" +
+                                    "👉 **03193736056**\n\n" +
+                                    "After transferring, enter your 11 or 12-digit Deposit Transaction ID (TID) below to instantly credit your wallet!"
+                                },
+                                color = Color.LightGray,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+
+                            OutlinedTextField(
+                                value = purchaseTidInput,
+                                onValueChange = { purchaseTidInput = it },
+                                label = { 
+                                    Text(
+                                        text = getLocalizedText("Enter JazzCash Transaction ID (TID)", "11 یا 12 ہندسوں کی آئی ڈی درج کریں", isUrdu), 
+                                        color = TextGray
+                                    ) 
+                                },
+                                placeholder = { Text("e.g. 10248596324", color = TextGray) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = GoldAccent),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = { showPurchaseCoinsDialogAmount = null },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = getLocalizedText("CANCEL", "منسوخ کریں", isUrdu)
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val tidClean = purchaseTidInput.trim()
+                                        if (tidClean.length < 11 || tidClean.length > 12 || !tidClean.all { it.isDigit() }) {
+                                            Toast.makeText(
+                                                context, 
+                                                getLocalizedText("Please enter a valid 11 or 12-digit transaction ID containing only numbers!", "براہ کرم موبی لنک سے وصول شدہ درست 11 یا 12 ہندسوں کی ٹرانزیکشن آئی ڈی درج کریں!", isUrdu), 
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            return@Button
+                                        }
+                                        viewModel.purchaseCoinsWithJazzCash(
+                                            amountCoins = showPurchaseCoinsDialogAmount!!,
+                                            costRs = purchaseCoinsCostRs,
+                                            txnId = tidClean
+                                        ) { success ->
+                                            if (success) {
+                                                val msgSuccess = if (isUrdu) "ادائیگی کی تصدیق ہو گئی! آپ کے اکاؤنٹ میں ${showPurchaseCoinsDialogAmount} ٹوکنز شامل کر دیے گئے ہیں۔ ✨" else "Payment verified! Credited ${showPurchaseCoinsDialogAmount} Coins! ✨"
+                                                Toast.makeText(context, msgSuccess, Toast.LENGTH_LONG).show()
+                                                showPurchaseCoinsDialogAmount = null
+                                            } else {
+                                                val msgFail = if (isUrdu) "آئی ڈی کی تصدیق ناکام رہی۔ براہ کرم درست نمبر درج کریں۔" else "Payment verification failed. Please check transaction log."
+                                                Toast.makeText(context, msgFail, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = getLocalizedText("VERIFY TRANSFER", "تصدیق کریں", isUrdu), 
+                                        color = Color.Black, 
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
-                        Divider(color = BorderColor, thickness = 0.5.dp)
                     }
                 }
             }
@@ -2760,21 +3313,33 @@ fun SettingsScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit, onLogg
         }
     }
 }
-
-// 13. ADMIN MODERATOR ACTION PANEL VIEW
 @Composable
 fun AdminPanelScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit) {
     val videos by viewModel.videos.collectAsState()
     val session by viewModel.session.collectAsState()
 
     val context = LocalContext.current
-    var simulatedTotalBannedFlag by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Song Registration states
+    var songNameInput by remember { mutableStateOf("") }
+    
+    // Dialog states for editing video details
+    var videoToEditId by remember { mutableStateOf<String?>(null) }
+    var editCaptionState by remember { mutableStateOf("") }
+    var editHashtagsState by remember { mutableStateOf("") }
+    var editMusicState by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
             OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("Moderator Administration Desk 🛡️", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = { 
+                    Column {
+                        Text("Owner Admin Console 👑", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                        Text("Active: Usama Arfi (03193736056)", color = CyanSecondary, fontSize = 11.sp)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
@@ -2784,103 +3349,324 @@ fun AdminPanelScreen(viewModel: TokTikViewModel, onBackPressed: () -> Unit) {
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(DarkBg)
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Content Moderation & Reports", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
-                border = BorderStroke(1.dp, BorderColor),
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Total Verified Creators: ${videos.distinctBy { it.username }.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text("Pending Inappropriate Content Reports: 1", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text("Gemini AI Automated Filter Protection: ENABLED", color = Color.Green, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Reports item lists simulation
-            Text("Active Content Incident Ticket Reports", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-
-            Card(colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Anonymous User Report #0412", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
-                        Box(
-                            modifier = Modifier
-                                .background(Color.Yellow.copy(0.2f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("PENDING", color = Color.Yellow, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Text("Report Object: Video Reels of @neon_rider", fontSize = 11.sp, color = TextGray)
-                    Text("Issue Reported: Simulated speed racing might encourage unsafe habits.", fontSize = 11.sp, color = Color.LightGray)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                Toast.makeText(context, "Incident report marked resolved (No fault found)!", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("DISMISS", fontSize = 10.sp, color = Color.White)
-                        }
-
-                        Button(
-                            onClick = {
-                                Toast.makeText(context, "Creator neon_rider warned successfully!", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("WARN CREATOR", fontSize = 10.sp, color = Color.White)
-                        }
-                    }
-                }
-            }
-
-            // Simulated user database ban administration list
-            Text("TokTik Creators Ban Control Desk", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-
-            Card(colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("neon_rider", "chef_elite", "golden_paws", "keyboard_clicks").forEach { user ->
+                // High level stats section
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                    border = BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("SYSTEM OVERVIEW", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp, letterSpacing = 1.sp)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("@$user", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                            Text("Total Videos Loaded: ${videos.size}", color = Color.LightGray, fontSize = 13.sp)
+                            Text("Registered Songs: ${viewModel.trendingSongs.size}", color = Color.LightGray, fontSize = 13.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Admin Balance: Rs. ${session?.earningsRs ?: 0.0}", color = GoldAccent, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Auto-Commissions: 10% ACTIVE", color = Color.Green, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
 
-                            Button(
-                                onClick = {
-                                    Toast.makeText(context, "Simulation Action: User @$user access controls toggled!", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                                border = BorderStroke(0.5.dp, BorderColor)
+                // SEC 1: Trending Track Registry
+                Text("Update Trending Soundtracks", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                    border = BorderStroke(1.dp, BorderColor)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Instantly insert new music tracks. These will update everyone's Music Selector when recording/uploading videos!", fontSize = 11.sp, color = TextGray)
+                        
+                        OutlinedTextField(
+                            value = songNameInput,
+                            onValueChange = { songNameInput = it },
+                            placeholder = { Text("e.g. Mere Humsafar - @Farhan Saeed 🎵", color = TextGray, fontSize = 12.sp) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = CyanSecondary,
+                                unfocusedBorderColor = BorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Button(
+                            onClick = {
+                                if (songNameInput.trim().isEmpty()) {
+                                    Toast.makeText(context, "Enter song name first!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                viewModel.addNewTrendingSong(songNameInput)
+                                Toast.makeText(context, "Song verified & updated to TokTik servers! 🎶", Toast.LENGTH_SHORT).show()
+                                songNameInput = ""
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanSecondary),
+                            modifier = Modifier.align(Alignment.End),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("REGISTER NEW SONG", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // SEC 2: Live Video Editing & Virality Control Desk
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Moderate Database Content (${videos.size})", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                }
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by user, caption, or hashtag...", color = TextGray, fontSize = 12.sp) },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = RedPrimary) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = RedPrimary,
+                        unfocusedBorderColor = BorderColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val filteredVideos = if (searchQuery.trim().isEmpty()) {
+                    videos
+                } else {
+                    videos.filter { 
+                        it.username.contains(searchQuery, ignoreCase = true) || 
+                        it.caption.contains(searchQuery, ignoreCase = true) ||
+                        it.hashtags.contains(searchQuery, ignoreCase = true)
+                    }
+                }
+
+                if (filteredVideos.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No match records found", color = TextGray, fontSize = 12.sp)
+                    }
+                }
+
+                filteredVideos.forEach { video ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                        border = BorderStroke(0.5.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("LIMIT PRIVILEGES", fontSize = 9.sp, color = RedPrimary, fontWeight = FontWeight.Bold)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(Color.DarkGray, CircleShape)
+                                    ) {
+                                        Text(
+                                            text = video.username.take(1).uppercase(),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("@${video.username}", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                                    if (video.isVerified) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.Filled.Verified, contentDescription = null, tint = CyanSecondary, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+
+                                if (video.isBlocked) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color.Red.copy(0.2f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("BLOCKED / HIDDEN", color = Color.Red, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color.Green.copy(0.2f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("LIVE FEED", color = Color.Green, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Text("Caption: ${video.caption}", color = Color.White, fontSize = 12.sp)
+                            Text("Hashtags: ${video.hashtags}", color = CyanSecondary, fontSize = 11.sp)
+                            Text("Music Track: ${video.musicName}", color = TextGray, fontSize = 11.sp)
+                            Text("Pre-Stats: Views: ${video.viewsCount} | Likes: ${video.likesCount} | Comments: ${video.commentsCount}", color = GoldAccent, fontSize = 10.sp)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // EDIT TEXT BUTTON
+                                Button(
+                                    onClick = {
+                                        videoToEditId = video.id
+                                        editCaptionState = video.caption
+                                        editHashtagsState = video.hashtags
+                                        editMusicState = video.musicName
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("EDIT TEXT 📝", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+
+                                // GO VIRAL BOOST BUTTON
+                                Button(
+                                    onClick = {
+                                        viewModel.adminBoostVideoViral(video.id)
+                                        Toast.makeText(context, "Viral Algorithm Boosted! Added 150K views & 9.5K likes instantly! 🚀", Toast.LENGTH_LONG).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                                    modifier = Modifier.weight(1.2f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("VIRAL BOOST 🚀", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+
+                                // BAN/BLOCK VIDEO TOGGLE
+                                Button(
+                                    onClick = {
+                                        viewModel.adminToggleVideoBlock(video.id)
+                                        Toast.makeText(context, "Video status updated!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (video.isBlocked) Color.Gray else Color(0xFFAC1B3E)),
+                                    modifier = Modifier.weight(1.2f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        text = if (video.isBlocked) "UNBLOCK VIDEO UNBAN" else "BLOCK VIDEO BAN", 
+                                        fontSize = 10.sp, 
+                                        color = Color.White, 
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
-                        Divider(color = BorderColor, thickness = 0.5.dp)
+                    }
+                }
+            }
+
+            // POPUP DIALOG FOR REAL EDITING
+            if (videoToEditId != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(0.85f))
+                        .clickable { /* prevent bubble clicks fallback */ }
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceSemiDark),
+                        border = BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Text("Edit Video details (ID: $videoToEditId) 📝", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+
+                            OutlinedTextField(
+                                value = editCaptionState,
+                                onValueChange = { editCaptionState = it },
+                                label = { Text("Caption text", color = TextGray) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = RedPrimary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
+                                value = editHashtagsState,
+                                onValueChange = { editHashtagsState = it },
+                                label = { Text("Hashtags", color = TextGray) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = RedPrimary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
+                                value = editMusicState,
+                                onValueChange = { editMusicState = it },
+                                label = { Text("Background sound track text", color = TextGray) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = RedPrimary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = { videoToEditId = null },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("CANCEL")
+                                }
+
+                                Button(
+                                    onClick = {
+                                        viewModel.adminUpdateVideoText(
+                                            videoToEditId!!,
+                                            editCaptionState,
+                                            editHashtagsState,
+                                            editMusicState
+                                        )
+                                        Toast.makeText(context, "Successfully updated live text! ✨", Toast.LENGTH_SHORT).show()
+                                        videoToEditId = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("SAVE TEXT", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -19,7 +19,7 @@ data class MessageComment(
     val isLiked: Boolean = false
 )
 
-class TokTikRepository(private val db: AppDatabase) {
+class TokTikRepository(val db: AppDatabase) {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val commentsAdapter = moshi.adapter<List<MessageComment>>(
@@ -52,9 +52,11 @@ class TokTikRepository(private val db: AppDatabase) {
                     followers = 12500,
                     following = 345,
                     coins = 850,
+                    points = 250,
+                    earningsRs = 25.0,
                     isVerified = true,
                     isPrivate = false,
-                    isLoggedIn = true,
+                    isLoggedIn = false,
                     isGuest = false,
                     socialLinks = "instagram.com/lucydances,youtube.com/lucytv"
                 )
@@ -373,6 +375,14 @@ class TokTikRepository(private val db: AppDatabase) {
 
     suspend fun deleteVideoDirect(video: CachedVideo) {
         db.cachedVideoDao().deleteVideo(video)
+    }
+
+    suspend fun updateVideoDetails(video: CachedVideo) {
+        db.cachedVideoDao().updateVideo(video)
+    }
+
+    suspend fun addNewVideo(video: CachedVideo) {
+        db.cachedVideoDao().insertVideo(video)
     }
 
     suspend fun addNotification(note: NotificationItem) {

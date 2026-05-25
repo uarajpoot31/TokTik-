@@ -15,7 +15,7 @@ import com.example.data.*
         NotificationItem::class,
         CachedVideo::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

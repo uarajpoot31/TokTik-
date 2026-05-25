@@ -12,10 +12,14 @@ data class UserSession(
     val followers: Int = 142,
     val following: Int = 89,
     val coins: Int = 500,
+    val points: Int = 0,
+    val earningsRs: Double = 0.0,
     val isVerified: Boolean = false,
     val isPrivate: Boolean = false,
     val isLoggedIn: Boolean = false,
     val isGuest: Boolean = true,
+    val isAdmin: Boolean = false,
+    val isBlocked: Boolean = false,
     val socialLinks: String = "instagram.com/toktik,twitter.com/toktik"
 )
 
@@ -73,9 +77,11 @@ data class CachedVideo(
     val likesCount: Int,
     val commentsCount: Int,
     val sharesCount: Int,
+    val viewsCount: Int = 12500,
     val isLiked: Boolean = false,
     val isSaved: Boolean = false,
     val isVerified: Boolean = false,
     val isPremium: Boolean = false,
+    val isBlocked: Boolean = false,
     val commentsJson: String = "[]" // Store localized mock comments
 )
