@@ -1,0 +1,6 @@
+{
+  "name": "TokTik",
+  "description": "A premium TikTok-style short video social media app with seamless vertical scrolls, sound triggers, local drafts, live virtual streaming, chat hub, coins/wallet systems, and AI-driven content generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
